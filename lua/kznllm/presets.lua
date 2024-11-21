@@ -401,6 +401,22 @@ presets = {
       endpoint = '/v1/chat/completions',
     },
   },
+  {
+    id = 'chat-model',
+    provider = 'ollama',
+    make_data_fn = make_data_for_openai_chat,
+    opts = {
+      model = 'qwen2.5-coder:32b',
+      data_params = {
+        max_tokens = 8192,
+        min_p = 0.9,
+        temperature = 2.1,
+      },
+      debug_fn = openai_debug_fn,
+      base_url = 'http://localhost:11434',
+      endpoint = '/v1/chat/completions',
+    },
+  },
 }
 
 return vim.tbl_extend('keep', M, presets)
