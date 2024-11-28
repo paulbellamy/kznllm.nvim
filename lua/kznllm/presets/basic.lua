@@ -41,6 +41,7 @@ local function NewBaseTask(config)
         current_buffer_context = current_buffer_context,
         replace = replace,
         context_files = utils.get_project_files(),
+        rules = utils.get_rules(),
       }
 
       local curl_options = config.preset_builder:build(prompt_args)

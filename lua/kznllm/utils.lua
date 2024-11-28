@@ -89,6 +89,29 @@ function M.get_visual_selection(opts)
   return visual_selection, replace_mode
 end
 
+---project scoped .cursorrules support
+---
+---Retrieves .cursorrules files based on the context directory identifier in the current working directory.
+---
+---@return { path: string, content: string }? for .cursorrules file if found in the context directory
+function M.get_rules()
+  if vim.fn.executable('fd') ~= 1 then
+    -- only use project mode if `fd` is available
+    return
+  end
+
+  local fd_dir_result = vim.system({ 'fd', '-tf', '-tl', '-HI', '.cursorrules', '-1' }):wait()
+  local file = vim.trim(fd_dir_result.stdout)
+  if file == '' then
+    return
+  end
+  local content = vim.fn.readfile(file)
+  if #content == 0 then
+    return
+  end
+  return { path = file, content = table.concat(content, '\n') }
+end
+
 ---project scoped context
 ---
 ---Retrieves project files based on the context directory identifier in the current working directory.
