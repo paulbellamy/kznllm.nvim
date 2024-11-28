@@ -249,7 +249,7 @@ M.options = {
   }),
   NewBaseTask({
     id = 'ollama',
-    description = 'ollama | qwen2.5-coder:23b | temp = 0.7',
+    description = 'ollama | qwen2.5-coder:32b | temp = 0.7',
     preset_builder = BasicOpenAIPreset:with_opts({
       provider = openai.OpenAIProvider:new({
         base_url = 'http://localhost:11434',
@@ -258,6 +258,57 @@ M.options = {
         ['model'] = 'qwen2.5-coder:32b',
         ['stream'] = true,
         ['temperature'] = 0.7,
+        ['top_k'] = 20,
+        ['top_p'] = 0.8,
+        ['repetition_penalty'] = 1.05,
+      },
+    }),
+  }),
+  NewBaseTask({
+    id = 'ollama',
+    description = 'ollama | mistral-large | temp = 0.7',
+    preset_builder = BasicOpenAIPreset:with_opts({
+      provider = openai.OpenAIProvider:new({
+        base_url = 'http://localhost:11434',
+      }),
+      params = {
+        ['model'] = 'mistral-large',
+        ['stream'] = true,
+        ['temperature'] = 0.7,
+        ['top_p'] = 0.8,
+        ['repetition_penalty'] = 1.05,
+      },
+    }),
+  }),
+  NewBaseTask({
+    id = 'ollama',
+    description = 'ollama | qwq | temp = 0.7',
+    preset_builder = BasicOpenAIPreset:with_opts({
+      provider = openai.OpenAIProvider:new({
+        base_url = 'http://localhost:11434',
+      }),
+      params = {
+        ['model'] = 'qwq',
+        ['stream'] = true,
+        ['temperature'] = 0.7,
+        ['top_k'] = 20,
+        ['top_p'] = 0.8,
+        ['repetition_penalty'] = 1.05,
+      },
+    }),
+  }),
+  NewBaseTask({
+    id = 'ollama',
+    description = 'ollama | qwq | temp = 0.1',
+    preset_builder = BasicOpenAIPreset:with_opts({
+      provider = openai.OpenAIProvider:new({
+        base_url = 'http://localhost:11434',
+      }),
+      params = {
+        ['model'] = 'qwq',
+        ['stream'] = true,
+        ['temperature'] = 0.1,
+        ['top_k'] = 20,
         ['top_p'] = 0.8,
         ['repetition_penalty'] = 1.05,
       },
