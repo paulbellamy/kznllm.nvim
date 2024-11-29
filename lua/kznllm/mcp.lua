@@ -97,9 +97,9 @@ local function Server(cmd, args, env, onExit)
   return S
 end
 
-function Client(server, capabilities)
-  if not capabilities or capabilities == {} then
-    capabilities = vim.empty_dict()
+function Client(server, clientCapabilities)
+  if not clientCapabilities or clientCapabilities == {} then
+    clientCapabilities = vim.empty_dict()
   end
   local result = server:request('initialize', {
     protocolVersion = LATEST_PROTOCOL_VERSION,
@@ -107,7 +107,7 @@ function Client(server, capabilities)
       name = 'kznllm',
       version = '0.1.0'
     },
-    capabilities = capabilities,
+    capabilities = clientCapabilities,
   })
   if result == nil then
     server:kill()
@@ -120,6 +120,7 @@ function Client(server, capabilities)
   end
 
   local C = {
+    clientCapabilities = clientCapabilities,
     server = server,
     serverCapabilities = result.capabilities,
     serverVersion = result.serverInfo,
@@ -127,6 +128,17 @@ function Client(server, capabilities)
 
   function C:kill()
     self.server:kill()
+  end
+
+  function C:supportsCapability(capabilities, path)
+    result = capabilities
+    for segment in string.gmatch(path, "(%w+)") do
+      result = result[segment]
+      if not result then
+        return false
+      end
+    end
+    return toboolean(result)
   end
 
   function C:assertCapabilityForMethod(method)
@@ -152,13 +164,11 @@ function Client(server, capabilities)
       return false
     end
 
-    for _, path in ipairs(capabilities) do
-       for capability in string.gmatch(path, "(%w+)") do
-        if not self.serverCapabilities[capability] then
-          error('Server does not support ' .. path .. ' (required for ' .. method .. ')')
-          return false
-        end
-       end
+    for _, capability in ipairs(capabilities) do
+      if not self.supportsCapability(self.serverCapabilities, capability) then
+        error('Server does not support ' .. capability .. ' (required for ' .. method .. ')')
+        return false
+      end
     end
     return true
   end
@@ -177,15 +187,13 @@ function Client(server, capabilities)
       return false
     end
 
-    for _, path in ipairs(capabilities) do
-       for capability in string.gmatch(path, "(%w+)") do
-        if not self.serverCapabilities[capability] then
-          error('Client does not support ' .. path ..' notifications (required for ' .. method .. ')')
-          return false
-        end
-       end
-     end
-     return true
+    for _, capability in ipairs(capabilities) do
+      if not self.supportsCapability(self.clientCapabilities, capability) then
+        error('Client does not support ' .. path ..' notifications (required for ' .. method .. ')')
+        return false
+      end
+    end
+    return true
   end
 
   function C:request(method, params)
@@ -358,8 +366,6 @@ function Host:loadAllClients()
     print('Initializing MCP Client: ' .. serverName)
     local client = Client(Server(serverConfig.command, serverConfig.args, serverConfig.env))
     self.clients[serverName] = client
-    local response = client:ping()
-    print('[' .. serverName .. '] Ping Response: ' .. vim.inspect(response))
   end
 end
 
