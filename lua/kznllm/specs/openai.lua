@@ -1,4 +1,5 @@
 local BaseProvider = require('kznllm.specs')
+local mcp = require('kznllm.mcp')
 local utils = require('kznllm.utils')
 
 local M = {}
@@ -69,14 +70,22 @@ end
 ---@return string
 function M.OpenAIProvider.handle_sse_stream(buf)
   -- based on sse spec (OpenAI spec uses data-only server-sent events)
-  local content = ''
+  local content = {}
 
   for data in buf:gmatch('data: ({.-})\n') do
     -- if data and data:match '"delta":' then
     local json = vim.json.decode(data)
     -- sglang server returns the role as one of the events and it becomes `vim.NIL`, so we have to handle it here
-    if json.choices and json.choices[1] and json.choices[1].delta and json.choices[1].delta.content then
-      content = content .. json.choices[1].delta.content
+    if json.choices then
+      for _, choice in ipairs(json.choices) do
+        if choice.delta and choice.delta.content then
+          table.insert(content, { type = 'text', text = choice.delta.content })
+        elseif choice.delta and choice.delta.tool_calls then
+          for _, tool_call in ipairs(choice.delta.tool_calls) do
+            table.insert(content, { type = 'tool_call', tool_call = mcp.openAIToAnthropicToolUse(tool_call) })
+          end
+        end
+      end
     else
       vim.print(data)
     end
@@ -114,6 +123,7 @@ local openai_template_path = utils.join_path({ utils.TEMPLATE_PATH, 'openai' })
 ---@return OpenAIPresetBuilder
 function M.OpenAIPresetBuilder:new(opts)
   local o = opts or {}
+  local tools = self:load_tools()
   local instance = {
     provider = o.provider or M.OpenAIProvider:new(),
     debug_template_path = o.debug_template_path or utils.join_path({ openai_template_path, 'debug.xml.jinja' }),
@@ -121,12 +131,25 @@ function M.OpenAIPresetBuilder:new(opts)
     params = (opts and opts.params) and opts.params or {
       ['model'] = 'o1-mini',
       ['stream'] = true,
+      ['tools'] = tools,
     },
     system_templates = {},
     message_templates = {},
   }
   setmetatable(instance, { __index = self })
   return instance
+end
+
+function M.OpenAIPresetBuilder:load_tools()
+  local tools = nil
+  local mcpHost = mcp.Host:init()
+  if mcpHost then
+    tools = {}
+    for _, tool in ipairs(mcpHost:getAllTools()) do
+      table.insert(tools, mcp.anthropicToOpenAITool(tool))
+    end
+  end
+  return tools
 end
 
 ---@param opts { params: OpenAIParameters, headers: OpenAIHeaders, provider: OpenAIProvider }

@@ -47,17 +47,23 @@ local function Server(cmd, args, env, onExit)
   local S = {}
 
   function S:request(method, params, options)
+    if not options then
+      options = {}
+    end
     nextRequestId = nextRequestId + 1
     local id = nextRequestId
     if not params or params == {} then
       params = vim.empty_dict()
     end
-    process:write(vim.json.encode({
+    -- vim.json.encode escapes forward slashes, which is not supported by the
+    -- server, so we need to unescape them.
+    local encodedRequest = vim.json.encode({
       jsonrpc = "2.0",
       method = method,
       params = params,
       id = id
-    }) .. '\n')
+    }):gsub('\\/', '/')
+    process:write(encodedRequest)
     -- Wait for response
     -- TODO: Do this asynchronously to not block the main thread
     local waitOk = vim.wait(options.timeout or DEFAULT_TIMEOUT, function()
@@ -131,14 +137,17 @@ function Client(server, clientCapabilities)
   end
 
   function C:supportsCapability(capabilities, path)
-    result = capabilities
+    local result = capabilities
     for segment in string.gmatch(path, "(%w+)") do
       result = result[segment]
       if not result then
         return false
       end
     end
-    return toboolean(result)
+    if result then
+      return true
+    end
+    return false
   end
 
   function C:assertCapabilityForMethod(method)
@@ -159,13 +168,13 @@ function Client(server, clientCapabilities)
     }
     local capabilities = requirements[method]
 
-    if capabilities == nil then
+    if not capabilities then
       error('Method ' .. method .. ' is not supported')
       return false
     end
 
     for _, capability in ipairs(capabilities) do
-      if not self.supportsCapability(self.serverCapabilities, capability) then
+      if not self:supportsCapability(self.serverCapabilities, capability) then
         error('Server does not support ' .. capability .. ' (required for ' .. method .. ')')
         return false
       end
@@ -182,13 +191,13 @@ function Client(server, clientCapabilities)
     }
     local capabilities = requirements[method]
 
-    if capabilities == nil then
+    if not capabilities then
       error('Notification ' .. method .. ' is not supported')
       return false
     end
 
     for _, capability in ipairs(capabilities) do
-      if not self.supportsCapability(self.clientCapabilities, capability) then
+      if not self:supportsCapability(self.clientCapabilities, capability) then
         error('Client does not support ' .. path ..' notifications (required for ' .. method .. ')')
         return false
       end
@@ -196,11 +205,11 @@ function Client(server, clientCapabilities)
     return true
   end
 
-  function C:request(method, params)
+  function C:request(method, params, options)
     if not self:assertCapabilityForMethod(method) then
       return
     end
-    return self.server:request(method, params)
+    return self.server:request(method, params, options)
   end
 
   -- Emits a notification, which is a one-way message that does not expect a response.
@@ -350,23 +359,51 @@ local Host = {
   clients = {},
 }
 
-function Host:loadAllClients()
+function Host:init()
+  if #self.clients > 0 then
+    -- Already loaded
+    return self
+  end
   local config = readConfigFile('.mcpconfig.json')
   if not config or config == {} then
-    error('No .mcpconfig.json file found')
+    vim.notify('No .mcpconfig.json file found', vim.log.levels.DEBUG)
     return
   end
 
   if not config.mcpServers or config.mcpServers == {} then
-    error('No mcpServers found in .mcpconfig.json')
+    vim.notify('No mcpServers found in .mcpconfig.json', vim.log.levels.DEBUG)
     return
   end
 
   for serverName, serverConfig in pairs(config.mcpServers) do
-    print('Initializing MCP Client: ' .. serverName)
+    vim.notify('Initializing MCP Client: ' .. serverName, vim.log.levels.DEBUG)
     local client = Client(Server(serverConfig.command, serverConfig.args, serverConfig.env))
     self.clients[serverName] = client
   end
+  return self
+end
+
+function Host:getAllTools()
+  self.clientsByTool = {}
+  local tools = {}
+  for serverName, client in pairs(self.clients) do
+    local result = client:listTools({})
+    for _, tool in ipairs(result) do
+      self.clientsByTool[tool.name] = client
+      table.insert(tools, tool)
+    end
+  end
+  return tools
+end
+
+function Host:runTool(toolUse)
+  local client = self.clientsByTool[toolUse.name]
+  if not client then
+    error('Tool not found: ' .. toolUse.name)
+    return
+  end
+
+  return client:callTool(toolUse)
 end
 
 function Host:killAllClients()
@@ -379,5 +416,5 @@ end
 
 -- Export the singleton
 local M = {}
-M.host = Host
+M.Host = Host
 return M

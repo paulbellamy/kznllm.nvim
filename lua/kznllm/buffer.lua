@@ -109,10 +109,19 @@ function BufferManager:create_streaming_job(args, handle_sse_stream_fn, progress
       end
       progress_fn()
       captured_stdout = data
-      local content = handle_sse_stream_fn(data)
-      if content then
+      local stream = handle_sse_stream_fn(data)
+      if stream.content then
         vim.schedule(function()
-          self:write_content(content, buf_id)
+          for _, content in ipairs(stream.content) do
+            if content.type == 'text' then
+              self:write_content(content, buf_id)
+            elseif content.type == 'tool_call' then
+              -- TODO: Trigger the tool call here
+              self:write_content('\nCalling tool: ' .. tool_call.name .. '\n', buf_id)
+              -- run_tool_call(tool_call)
+              -- How do we return this to the model for streaming?
+            end
+          end
         end)
       end
     end,

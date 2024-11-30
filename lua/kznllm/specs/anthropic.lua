@@ -105,12 +105,15 @@ local current_event_state
 ---@param line string
 ---@return string?
 function M.AnthropicProvider.handle_sse_stream(line)
-  local content = ''
+  local content = {}
   for event, data in line:gmatch('event: ([%w_]+)\ndata: ({.-})\n') do
     if event == 'content_block_delta' then
       local json = vim.json.decode(data)
       if json.delta and json.delta.text then
-        content = content .. json.delta.text
+        table.insert(content, { type = 'text', text = json.delta.text })
+      elseif json.delta and json.delta.type == 'tool_use' then
+        -- TODO: Handle tool calls
+        error('AnthropicProvider.handle_sse_stream: tool_calls NOT IMPLEMENTED')
       end
     elseif event == 'content_block_start' then
     elseif event == 'content_block_stop' then
