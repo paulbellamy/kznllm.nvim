@@ -95,6 +95,25 @@ function M.OpenAIProvider.handle_sse_stream(buf)
   return content
 end
 
+--- Process tool call result based on OpenAI spec
+--- [See Documentation](https://platform.openai.com/docs/api-reference/chat/create#chat-create-stream)
+---
+---@param args table, previous call args
+---@param stream response streamed from the model
+---@param tool_result response from the tool call
+---@return args for the next call
+function M.OpenAIProvider.handle_tool_result(args, response, tool_result)
+  -- Add the model's response to the conversation history
+  -- TODO: This isn't appending right. This would be for the completions API, not the streaming API
+  table.insert(args.data.messages, response.message)
+  -- add the tool result to the conversation history
+  table.insert(args.data.messages, {
+    role = 'tool',
+    content = tool_result,
+  })
+  return args
+end
+
 ---@class OpenAIPresetConfig
 ---@field id string
 ---@field description string

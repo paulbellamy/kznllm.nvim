@@ -93,8 +93,8 @@ local function noop()
   api.nvim_buf_set_text(0, 0, 0, 0, 0, {})
 end
 
----@param args table
-function BufferManager:create_streaming_job(args, handle_sse_stream_fn, progress_fn, on_complete_fn)
+---@param curl_options table
+function BufferManager:create_streaming_job(curl_options, provider, progress_fn, on_complete_fn)
   local buf_id = api.nvim_get_current_buf()
   local state = self:get_or_add_buffer(buf_id)
 
@@ -104,6 +104,7 @@ function BufferManager:create_streaming_job(args, handle_sse_stream_fn, progress
   local captured_stdout = ''
   --- NOTE: vim.system can flush multiple consecutive lines into the same stdout buffer
   --- (different from how plenary jobs handles it)
+  local args = provider:make_curl_args(curl_options)
   local job = vim.system(vim.list_extend({ 'curl' }, args), {
     stdout = function(err, data)
       if data == nil then
@@ -111,7 +112,7 @@ function BufferManager:create_streaming_job(args, handle_sse_stream_fn, progress
       end
       progress_fn()
       captured_stdout = data
-      local stream = handle_sse_stream_fn(data)
+      local stream = provider.handle_sse_stream(data)
       if stream and #stream > 0 then
         vim.schedule(function()
           for _, choice in ipairs(stream) do
@@ -121,8 +122,9 @@ function BufferManager:create_streaming_job(args, handle_sse_stream_fn, progress
               -- TODO: Prompt user to confirm tool call
               self:write_content('\nCalling tool: ' .. choice.tool_call.name .. '\n', buf_id)
               local result = mcp.Host:runTool(choice.tool_call, function(result)
-                -- TODO: How do we return this to the model for streaming?
-                vim.print('Tool call: ' .. vim.inspect(choice.tool_call) .. ', Result: ' .. vim.inspect(result))
+                -- TODO: Loop and re-call curl with the result here
+                curl_options = provider.handle_tool_result(curl_options, stream, result)
+                vim.print('Next call with tool result: ' .. vim.inspect(curl_options))
               end)
             end
           end

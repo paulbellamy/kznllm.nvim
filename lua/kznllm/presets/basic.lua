@@ -58,7 +58,6 @@ local function NewBaseTask(config)
       end
 
       local provider = config.preset_builder.provider
-      local args = provider:make_curl_args(curl_options)
 
       local state = { start = os.time(), last_updated = nil }
       p:report({ message = ('%s'):format(config.description) })
@@ -67,7 +66,7 @@ local function NewBaseTask(config)
           return 'yapped'
         end
       local message = message_fn(state)
-      local _ = buffer_manager:create_streaming_job(args, provider.handle_sse_stream, function()
+      local _ = buffer_manager:create_streaming_job(curl_options, provider, function()
         local progress_message = message_fn(state)
         if progress_message ~= nil then
           message = progress_message
