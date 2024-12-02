@@ -1,3 +1,5 @@
+local mcp = require('kznllm.mcp')
+
 -- Buffer management singleton
 local BufferManager = {}
 local api = vim.api
@@ -110,16 +112,18 @@ function BufferManager:create_streaming_job(args, handle_sse_stream_fn, progress
       progress_fn()
       captured_stdout = data
       local stream = handle_sse_stream_fn(data)
-      if stream.content then
+      if stream and #stream > 0 then
         vim.schedule(function()
-          for _, content in ipairs(stream.content) do
-            if content.type == 'text' then
-              self:write_content(content, buf_id)
-            elseif content.type == 'tool_call' then
-              -- TODO: Trigger the tool call here
-              self:write_content('\nCalling tool: ' .. tool_call.name .. '\n', buf_id)
-              -- run_tool_call(tool_call)
-              -- How do we return this to the model for streaming?
+          for _, choice in ipairs(stream) do
+            if choice.type == 'text' then
+              self:write_content(choice.text, buf_id)
+            elseif choice.type == 'tool_call' then
+              -- TODO: Prompt user to confirm tool call
+              self:write_content('\nCalling tool: ' .. choice.tool_call.name .. '\n', buf_id)
+              local result = mcp.Host:runTool(choice.tool_call, function(result)
+                -- TODO: How do we return this to the model for streaming?
+                vim.print('Tool call: ' .. vim.inspect(choice.tool_call) .. ', Result: ' .. vim.inspect(result))
+              end)
             end
           end
         end)

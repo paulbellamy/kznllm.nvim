@@ -78,7 +78,7 @@ function M.OpenAIProvider.handle_sse_stream(buf)
     -- sglang server returns the role as one of the events and it becomes `vim.NIL`, so we have to handle it here
     if json.choices then
       for _, choice in ipairs(json.choices) do
-        if choice.delta and choice.delta.content then
+        if choice.delta and choice.delta.content and choice.delta.content ~= '' then
           table.insert(content, { type = 'text', text = choice.delta.content })
         elseif choice.delta and choice.delta.tool_calls then
           for _, tool_call in ipairs(choice.delta.tool_calls) do
@@ -123,7 +123,6 @@ local openai_template_path = utils.join_path({ utils.TEMPLATE_PATH, 'openai' })
 ---@return OpenAIPresetBuilder
 function M.OpenAIPresetBuilder:new(opts)
   local o = opts or {}
-  local tools = self:load_tools()
   local instance = {
     provider = o.provider or M.OpenAIProvider:new(),
     debug_template_path = o.debug_template_path or utils.join_path({ openai_template_path, 'debug.xml.jinja' }),
@@ -131,25 +130,17 @@ function M.OpenAIPresetBuilder:new(opts)
     params = (opts and opts.params) and opts.params or {
       ['model'] = 'o1-mini',
       ['stream'] = true,
-      ['tools'] = tools,
     },
     system_templates = {},
     message_templates = {},
   }
   setmetatable(instance, { __index = self })
+  self:load_tools()
   return instance
 end
 
-function M.OpenAIPresetBuilder:load_tools()
-  local tools = nil
-  local mcpHost = mcp.Host:init()
-  if mcpHost then
-    tools = {}
-    for _, tool in ipairs(mcpHost:getAllTools()) do
-      table.insert(tools, mcp.anthropicToOpenAITool(tool))
-    end
-  end
-  return tools
+function M.OpenAIPresetBuilder:load_tools(callback)
+  mcp.Host:init()
 end
 
 ---@param opts { params: OpenAIParameters, headers: OpenAIHeaders, provider: OpenAIProvider }
@@ -181,6 +172,8 @@ end
 function M.OpenAIPresetBuilder:build(args)
   ---@type OpenAIMessage[]
   local messages = {}
+  ---@type OpenAITool[]
+  local tools = mcp.Host:getAllTools()
 
   for _, template in ipairs(self.system_templates) do
     table.insert(messages, {
@@ -204,7 +197,7 @@ function M.OpenAIPresetBuilder:build(args)
   end
 
   return vim.tbl_extend('keep', self.headers, {
-    data = vim.tbl_extend('keep', self.params, { messages = messages }),
+    data = vim.tbl_extend('keep', self.params, { messages = messages, tools = tools }),
   })
 end
 

@@ -1,3 +1,5 @@
+local M = {}
+
 local LATEST_PROTOCOL_VERSION = "2024-11-05"
 local SUPPORTED_PROTOCOL_VERSIONS = { LATEST_PROTOCOL_VERSION, "2024-10-07" }
 
@@ -28,11 +30,18 @@ local function Server(cmd, args, env, onExit)
       if response == nil then
         return
       end
+      -- print('Response: ' .. vim.inspect(response))
       if not response.id then
         -- TODO: Handle notifications
         return
       end
-      responses[response.id] = response
+      local handler = responses[response.id]
+      if not handler then
+        error('No handler for response: ' .. vim.inspect(response))
+        return
+      end
+      responses[response.id] = nil
+      handler(response)
     end,
     stderr = function(err, data)
       if data == nil then
@@ -55,6 +64,17 @@ local function Server(cmd, args, env, onExit)
     if not params or params == {} then
       params = vim.empty_dict()
     end
+    -- Setup a response handler
+    responses[id] = function(response)
+      -- Wait for response
+      if response.error then
+        error('Error response from server: ' .. vim.inspect(response.error))
+        return
+      end
+      if options.callback then
+        options.callback(response.result)
+      end
+    end
     -- vim.json.encode escapes forward slashes, which is not supported by the
     -- server, so we need to unescape them.
     local encodedRequest = vim.json.encode({
@@ -62,25 +82,8 @@ local function Server(cmd, args, env, onExit)
       method = method,
       params = params,
       id = id
-    }):gsub('\\/', '/')
+    }):gsub('\\/', '/') .. '\n'
     process:write(encodedRequest)
-    -- Wait for response
-    -- TODO: Do this asynchronously to not block the main thread
-    local waitOk = vim.wait(options.timeout or DEFAULT_TIMEOUT, function()
-      return responses[id] ~= nil
-    end)
-    if not waitOk then
-      error('Timeout waiting for response from MCP server')
-      return
-    end
-    local response = responses[id]
-    assert(response ~= nil, 'Response is nil')
-    responses[id] = nil
-    if response.error then
-      error('Error response from server: ' .. vim.inspect(response.error))
-      return
-    end
-    return response.result
   end
 
   function S:notification(method, params)
@@ -107,30 +110,55 @@ function Client(server, clientCapabilities)
   if not clientCapabilities or clientCapabilities == {} then
     clientCapabilities = vim.empty_dict()
   end
-  local result = server:request('initialize', {
-    protocolVersion = LATEST_PROTOCOL_VERSION,
-    clientInfo = {
-      name = 'kznllm',
-      version = '0.1.0'
-    },
-    capabilities = clientCapabilities,
-  })
-  if result == nil then
-    server:kill()
-    return
-  end
-  if not protocolVersionIsSupported(result.protocolVersion) then
-    error('Servers protocol version is not supported: ' .. vim.inspect(result.protocolVersion))
-    server:kill()
-    return
-  end
 
   local C = {
     clientCapabilities = clientCapabilities,
     server = server,
-    serverCapabilities = result.capabilities,
-    serverVersion = result.serverInfo,
+    isInitialized = false,
+    onInitializedCallback = function() end,
   }
+
+  local result = server:request(
+    'initialize',
+    {
+      protocolVersion = LATEST_PROTOCOL_VERSION,
+      clientInfo = {
+        name = 'kznllm',
+        version = '0.1.0'
+      },
+      capabilities = clientCapabilities,
+    },
+    {
+      callback = function(result)
+        if not result then
+          server:kill()
+          return
+        end
+        if not protocolVersionIsSupported(result.protocolVersion) then
+          error('Servers protocol version is not supported: ' .. vim.inspect(result.protocolVersion))
+          server:kill()
+          return
+        end
+        C.serverCapabilities = result.capabilities
+        C.serverVersion = result.serverInfo
+        C.isInitialized = true
+        C:onInitializedCallback()
+      end
+    }
+  )
+
+  function C:onInitialized(callback)
+    if C.isInitialized then
+      callback(C)
+    else
+      local newCallback = callback
+      local oldCallback = C.onInitializedCallback
+      C.onInitializedCallback = function()
+        oldCallback(C)
+        newCallback(C)
+      end
+    end
+  end
 
   function C:kill()
     self.server:kill()
@@ -220,52 +248,52 @@ function Client(server, clientCapabilities)
     self.server:notification(method, params)
   end
 
-  function C:ping()
-    return self:request('ping')
+  function C:ping(options)
+    return self:request('ping', options)
   end
 
-  function C:complete(params)
-    return self:request('completion/complete', params)
+  function C:complete(params, options)
+    return self:request('completion/complete', params, options)
   end
 
-  function C:setLoggingLevel(level)
-    return self:request('logging/setLevel', { level = level })
+  function C:setLoggingLevel(level, options)
+    return self:request('logging/setLevel', { level = level }, options)
   end
 
-  function C:getPrompt(params)
-    return self:request('prompts/get', params)
+  function C:getPrompt(params, options)
+    return self:request('prompts/get', params, options)
   end
 
-  function C:listPrompts(params)
-    return self:request('prompts/list', params)
+  function C:listPrompts(options)
+    return self:request('prompts/list', {}, options)
   end
 
-  function C:listResources(params)
-    return self:request('resources/list', params)
+  function C:listResources(options)
+    return self:request('resources/list', {}, options)
   end
 
-  function C:listResourceTemplates(params)
-    return self:request('resources/templates/list', params)
+  function C:listResourceTemplates(params, options)
+    return self:request('resources/templates/list', params, options)
   end
 
-  function C:readResource(params)
-    return self:request('resources/read', params)
+  function C:readResource(params, options)
+    return self:request('resources/read', params, options)
   end
 
-  function C:subscribeResource(params)
-    return self:request('resources/subscribe', params)
+  function C:subscribeResource(params, options)
+    return self:request('resources/subscribe', params, options)
   end
 
-  function C:unsubscribeResource(params)
-    return self:request('resources/unsubscribe', params)
+  function C:unsubscribeResource(params, options)
+    return self:request('resources/unsubscribe', params, options)
   end
 
-  function C:callTool(params)
-    return self:request('tools/call', params)
+  function C:callTool(params, options)
+    return self:request('tools/call', params, options)
   end
 
-  function C:listTools(params)
-    return self:request('tools/list', params)
+  function C:listTools(options)
+    return self:request('tools/list', params, options)
   end
 
   function C:sendRootsListChanged()
@@ -280,7 +308,7 @@ end
 
 -- Ollama uses openai API-style tools, but MCP uses anthropic-style tools, so
 -- we need to convert them.
-function anthropicToOpenAiTool(anthropicTool)
+function M.anthropicToOpenAiTool(anthropicTool)
   return {
     type = 'function',
     ['function'] = {
@@ -295,7 +323,7 @@ function anthropicToOpenAiTool(anthropicTool)
   }
 end
 
-function anthropicToOpenAiToolUse(anthropicToolUse)
+function M.anthropicToOpenAiToolUse(anthropicToolUse)
   return {
     id = anthropicToolUse.id,
     type = 'function',
@@ -306,7 +334,7 @@ function anthropicToOpenAiToolUse(anthropicToolUse)
   }
 end
 
-function openAIToAnthropicToolUse(openAiToolUse)
+function M.openAIToAnthropicToolUse(openAiToolUse)
   return {
       type = 'tool_use',
       id = openAiToolUse.id,
@@ -375,46 +403,55 @@ function Host:init()
     return
   end
 
+  self.clientsByTool = {}
   for serverName, serverConfig in pairs(config.mcpServers) do
     vim.notify('Initializing MCP Client: ' .. serverName, vim.log.levels.DEBUG)
     local client = Client(Server(serverConfig.command, serverConfig.args, serverConfig.env))
     self.clients[serverName] = client
+    client:onInitialized(function()
+      client.tools = {}
+      client:listTools({
+        callback = function(result)
+          for _, tool in ipairs(result.tools) do
+            self.clientsByTool[tool.name] = client
+            table.insert(client.tools, M.anthropicToOpenAiTool(tool))
+          end
+        end
+      })
+    end)
   end
+
   return self
 end
 
 function Host:getAllTools()
-  self.clientsByTool = {}
   local tools = {}
   for serverName, client in pairs(self.clients) do
-    local result = client:listTools({})
-    for _, tool in ipairs(result) do
-      self.clientsByTool[tool.name] = client
+    for _, tool in ipairs(client.tools) do
       table.insert(tools, tool)
     end
   end
   return tools
 end
 
-function Host:runTool(toolUse)
+function Host:runTool(toolUse, callback)
   local client = self.clientsByTool[toolUse.name]
   if not client then
     error('Tool not found: ' .. toolUse.name)
     return
   end
 
-  return client:callTool(toolUse)
+  client:callTool(toolUse, { callback = callback })
 end
 
 function Host:killAllClients()
   for serverName, client in pairs(self.clients) do
-    print('Killing MCP Client: ' .. serverName)
+    vim.notify('Killing MCP Client: ' .. serverName, vim.log.levels.DEBUG)
     client:kill()
   end
   self.clients = {}
 end
 
 -- Export the singleton
-local M = {}
 M.Host = Host
 return M
