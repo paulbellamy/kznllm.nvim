@@ -106,12 +106,13 @@ local function Server(cmd, args, env, onExit)
   return S
 end
 
-function Client(server, clientCapabilities)
+function Client(name, server, clientCapabilities)
   if not clientCapabilities or clientCapabilities == {} then
     clientCapabilities = vim.empty_dict()
   end
 
   local C = {
+    name = name,
     clientCapabilities = clientCapabilities,
     server = server,
     isInitialized = false,
@@ -329,17 +330,8 @@ function M.anthropicToOpenAiToolUse(anthropicToolUse)
     type = 'function',
     ['function'] = {
       name = anthropicToolUse.name,
-      arguments = anthropicToolUse.input,
+      arguments = anthropicToolUse.arguments,
     }
-  }
-end
-
-function M.openAIToAnthropicToolUse(openAiToolUse)
-  return {
-      type = 'tool_use',
-      id = openAiToolUse.id,
-      name = openAiToolUse['function'].name,
-      input = openAiToolUse['function'].arguments,
   }
 end
 
@@ -384,29 +376,34 @@ local function readConfigFile(filename)
 end
 
 local Host = {
+  isInitialized = false,
+  allowedTools = {},
   clients = {},
+  clientsByTool = {},
 }
 
 function Host:init()
-  if #self.clients > 0 then
+  if self.isInitialized then
     -- Already loaded
     return self
   end
+  self.isInitialized = true
+
   local config = readConfigFile('.mcpconfig.json')
   if not config or config == {} then
-    vim.notify('No .mcpconfig.json file found', vim.log.levels.DEBUG)
+    print('No .mcpconfig.json file found')
     return
   end
 
   if not config.mcpServers or config.mcpServers == {} then
-    vim.notify('No mcpServers found in .mcpconfig.json', vim.log.levels.DEBUG)
+    print('No mcpServers found in .mcpconfig.json')
     return
   end
 
   self.clientsByTool = {}
   for serverName, serverConfig in pairs(config.mcpServers) do
-    vim.notify('Initializing MCP Client: ' .. serverName, vim.log.levels.DEBUG)
-    local client = Client(Server(serverConfig.command, serverConfig.args, serverConfig.env))
+    print('Initializing MCP Client: ' .. serverName)
+    local client = Client(serverName, Server(serverConfig.command, serverConfig.args, serverConfig.env))
     self.clients[serverName] = client
     client:onInitialized(function()
       client.tools = {}
@@ -441,12 +438,35 @@ function Host:runTool(toolUse, callback)
     return
   end
 
-  client:callTool(toolUse, { callback = callback })
+  if self.allowedTools[toolUse.name] then
+    client:callTool(toolUse, { callback = callback })
+    return
+  end
+
+  vim.schedule(function()
+    vim.ui.select(
+      { 'Allow for this session', 'Allow once', 'Deny' },
+      {
+        prompt = 'Run ' .. toolUse.name .. ' from ' .. client.name,
+        default = 'Deny',
+      },
+      function(choice)
+        if choice == 'Deny' then
+          callback({ isError = true, content = 'Tool call denied' })
+          return
+        end
+        if choice == 'Allow for this session' then
+          self.allowedTools[toolUse.name] = true
+        end
+        client:callTool(toolUse, { callback = callback })
+      end
+    )
+  end)
 end
 
 function Host:killAllClients()
   for serverName, client in pairs(self.clients) do
-    vim.notify('Killing MCP Client: ' .. serverName, vim.log.levels.DEBUG)
+    print('Killing MCP Client: ' .. serverName)
     client:kill()
   end
   self.clients = {}

@@ -94,57 +94,14 @@ local function noop()
 end
 
 ---@param curl_options table
-function BufferManager:create_streaming_job(curl_options, provider, progress_fn, on_complete_fn)
+function BufferManager:create_streaming_job(initial_curl_options, provider, progress_fn, on_complete_fn)
   local buf_id = api.nvim_get_current_buf()
   local state = self:get_or_add_buffer(buf_id)
 
   --- should be safe to do this before any jobs
   noop()
 
-  local captured_stdout = ''
-  --- NOTE: vim.system can flush multiple consecutive lines into the same stdout buffer
-  --- (different from how plenary jobs handles it)
-  local args = provider:make_curl_args(curl_options)
-  local job = vim.system(vim.list_extend({ 'curl' }, args), {
-    stdout = function(err, data)
-      if data == nil then
-        return
-      end
-      progress_fn()
-      captured_stdout = data
-      local stream = provider.handle_sse_stream(data)
-      if stream and #stream > 0 then
-        vim.schedule(function()
-          for _, choice in ipairs(stream) do
-            if choice.type == 'text' then
-              self:write_content(choice.text, buf_id)
-            elseif choice.type == 'tool_call' then
-              -- TODO: Prompt user to confirm tool call
-              self:write_content('\nCalling tool: ' .. choice.tool_call.name .. '\n', buf_id)
-              local result = mcp.Host:runTool(choice.tool_call, function(result)
-                -- TODO: Loop and re-call curl with the result here
-                curl_options = provider.handle_tool_result(curl_options, stream, result)
-                vim.print('Next call with tool result: ' .. vim.inspect(curl_options))
-              end)
-            end
-          end
-        end)
-      end
-    end,
-  }, function(obj)
-    on_complete_fn()
-    vim.schedule(function()
-      if obj.code and obj.code ~= 0 then
-        vim.notify(('[curl] (exit code: %d) %s'):format(obj.code, captured_stdout), vim.log.levels.ERROR)
-      else
-        -- Clean up extmark on successful completion
-        if state.extmark_id then
-          api.nvim_buf_del_extmark(buf_id, self.state.ns_id, state.extmark_id)
-          state.extmark_id = nil
-        end
-      end
-    end)
-  end)
+  local job = self:stream_conversation(initial_curl_options, provider, progress_fn, on_complete_fn)
 
   api.nvim_create_autocmd('User', {
     group = group,
@@ -157,6 +114,112 @@ function BufferManager:create_streaming_job(curl_options, provider, progress_fn,
     end,
   })
   return job
+end
+
+function BufferManager:stream_conversation(initial_request, provider, progress_fn, on_complete_fn)
+  local previous_request = initial_request
+  local stream
+  local pending_requests = { initial_request }
+  local pending_tool_calls = {}
+  local job
+
+  function process_tool_call(tool_call)
+    print('Calling tool: ' .. tool_call.name .. ' - ' .. vim.json.encode(tool_call))
+    mcp.Host:runTool(tool_call, function(result)
+      -- Loop and re-call curl with the result
+      -- TODO: handle result.isError case here.
+      print('Tool call result' .. tool_call.name .. ' -> ' .. vim.json.encode(result.content))
+      local next_request = provider.handle_tool_result(previous_request, stream, result.content)
+      table.insert(pending_requests, next_request)
+      handle_conversation(pending_requests, provider, progress_fn, on_complete_fn, previous_request, pending_tool_calls)
+    end)
+  end
+
+  function process_request(request)
+    local captured_stdout = ''
+    --- NOTE: vim.system can flush multiple consecutive lines into the same stdout buffer
+    --- (different from how plenary jobs handles it)
+    job = vim.system(
+      vim.list_extend({ 'curl' }, provider:make_curl_args(request)),
+      {
+        stdout = function(err, data)
+          if not data then
+            return
+          end
+          progress_fn()
+          captured_stdout = data
+          stream = provider.handle_sse_stream(data)
+          for _, choice in ipairs(stream) do
+            if choice.type == 'text' then
+              vim.schedule(function()
+                self:write_content(choice.text, buf_id)
+              end)
+            elseif choice.type == 'tool_call' then
+              table.insert(pending_tool_calls, choice.tool_call)
+              vim.schedule(function()
+                self:write_content('Calling tool: ' .. choice.tool_call.name .. ' - ' .. vim.json.encode(choice.tool_call) .. '\n', buf_id)
+              end)
+            end
+          end
+        end,
+      },
+      function(obj)
+        if obj.code and obj.code ~= 0 then
+          -- curl request failed. abort.
+          vim.schedule(function()
+            vim.notify(('[curl] (exit code: %d) %s'):format(obj.code, captured_stdout), vim.log.levels.ERROR)
+          end)
+          return
+        end
+        -- More requests to make. Continue the conversation.
+        handle_conversation()
+      end
+    )
+  end
+
+  function done()
+    -- All done. Call the completion function.
+    on_complete_fn()
+    vim.schedule(function()
+      -- Clean up extmark on successful completion
+      if self.state.extmark_id then
+        api.nvim_buf_del_extmark(buf_id, self.state.ns_id, self.state.extmark_id)
+        self.state.extmark_id = nil
+      end
+    end)
+  end
+
+  function handle_conversation()
+    -- Handle any pending tool calls
+    print('handle_conversation: ' .. vim.inspect(#pending_requests) .. ' pending requests, ' .. vim.inspect(#pending_tool_calls) .. ' pending tool calls')
+    local tool_call = table.remove(pending_tool_calls, 1)
+    if tool_call then
+      process_tool_call(tool_call)
+      return
+    end
+
+    -- Handle any pending requests
+    local request = table.remove(pending_requests, 1)
+    if request then
+      process_request(request)
+      return
+    end
+
+    -- If we're out of tool calls and requests, we're done
+    done()
+  end
+
+  -- Start the loop
+  handle_conversation()
+
+  return {
+    is_closing = function()
+      return job and job:is_closing()
+    end,
+    kill = function(signal)
+      return job and job:kill(signal)
+    end
+  }
 end
 
 -- Export the singleton

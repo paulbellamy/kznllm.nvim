@@ -82,7 +82,18 @@ function M.OpenAIProvider.handle_sse_stream(buf)
           table.insert(content, { type = 'text', text = choice.delta.content })
         elseif choice.delta and choice.delta.tool_calls then
           for _, tool_call in ipairs(choice.delta.tool_calls) do
-            table.insert(content, { type = 'tool_call', tool_call = mcp.openAIToAnthropicToolUse(tool_call) })
+            table.insert(
+              content,
+              {
+                type = 'tool_call',
+                tool_call = {
+                  type = 'tool_use',
+                  id = tool_call.id,
+                  name = tool_call['function'].name,
+                  arguments = vim.json.decode(tool_call['function'].arguments),
+                }
+              }
+            )
           end
         end
       end
@@ -102,16 +113,16 @@ end
 ---@param stream response streamed from the model
 ---@param tool_result response from the tool call
 ---@return args for the next call
-function M.OpenAIProvider.handle_tool_result(args, response, tool_result)
+function M.OpenAIProvider.handle_tool_result(previous_request, response, tool_result)
   -- Add the model's response to the conversation history
   -- TODO: This isn't appending right. This would be for the completions API, not the streaming API
-  table.insert(args.data.messages, response.message)
+  table.insert(previous_request.data.messages, response.message)
   -- add the tool result to the conversation history
-  table.insert(args.data.messages, {
+  table.insert(previous_request.data.messages, {
     role = 'tool',
     content = tool_result,
   })
-  return args
+  return previous_request
 end
 
 ---@class OpenAIPresetConfig
