@@ -124,12 +124,9 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
   local job
 
   function process_tool_call(tool_call, callback_fn)
-    print('Calling tool: ' .. tool_call.name .. ' - ' .. vim.json.encode(tool_call))
     mcp.Host:runTool(tool_call, function(result)
       -- Loop and re-call curl with the result
-      -- TODO: handle result.isError case here.
-      print('Tool call result' .. tool_call.name .. ' -> ' .. vim.json.encode(result.content))
-      local next_request = provider.handle_tool_result(previous_request, stream, result.content)
+      local next_request = provider.handle_tool_result(previous_request, stream, result.content, result.isError)
       table.insert(pending_requests, next_request)
       callback_fn()
     end)

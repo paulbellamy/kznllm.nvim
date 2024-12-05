@@ -113,15 +113,37 @@ end
 ---@param stream response streamed from the model
 ---@param tool_result response from the tool call
 ---@return args for the next call
-function M.OpenAIProvider.handle_tool_result(previous_request, response, tool_result)
+function M.OpenAIProvider.handle_tool_result(previous_request, response, tool_result, is_error)
   -- Add the model's response to the conversation history
-  -- TODO: This isn't appending right. This would be for the completions API, not the streaming API
-  table.insert(previous_request.data.messages, response.message)
+  local text = {}
+  local tool_calls = {}
+  for _, choice in ipairs(response) do
+    if choice.type == 'text' then
+      table.insert(text, choice.text)
+    elseif choice.type == 'tool_call' then
+      table.insert(tool_calls, choice.tool_call)
+    end
+  end
+  if #text > 0 or #tool_calls > 0 then
+    table.insert(previous_request.data.messages, {
+      role = 'assistant',
+      content = table.concat(text),
+      tool_calls = tool_calls,
+    })
+  end
   -- add the tool result to the conversation history
-  table.insert(previous_request.data.messages, {
-    role = 'tool',
-    content = tool_result,
-  })
+  if is_error then
+    table.insert(previous_request.data.messages, {
+      role = 'tool',
+      content = 'An error occurred while calling the tool',
+    })
+  end
+  if tool_result then
+    table.insert(previous_request.data.messages, {
+      role = 'tool',
+      content = tool_result,
+    })
+  end
   return previous_request
 end
 
