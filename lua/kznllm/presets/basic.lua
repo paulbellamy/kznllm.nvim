@@ -66,8 +66,8 @@ local function NewBaseTask(config)
           return 'yapped'
         end
       local message = message_fn(state)
-      local _ = buffer_manager:create_streaming_job(curl_options, provider, function()
-        local progress_message = message_fn(state)
+      local _ = buffer_manager:create_streaming_job(curl_options, provider, function(mesage_override)
+        local progress_message = message_override or message_fn(state)
         if progress_message ~= nil then
           message = progress_message
         end

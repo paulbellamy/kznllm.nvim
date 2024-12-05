@@ -124,6 +124,7 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
   local job
 
   function process_tool_call(tool_call, callback_fn)
+    progress_fn('Running ' .. tool_call.name)
     mcp.Host:runTool(tool_call, function(result)
       -- Loop and re-call curl with the result
       local next_request = provider.handle_tool_result(previous_request, stream, result.content, result.isError)
@@ -139,6 +140,7 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
     job = vim.system(
       vim.list_extend({ 'curl' }, provider:make_curl_args(request)),
       {
+        stdin = provider:make_curl_body(request),
         stdout = function(err, data)
           if not data then
             return
@@ -148,10 +150,14 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
           stream = provider.handle_sse_stream(data)
           for _, choice in ipairs(stream) do
             if choice.type == 'text' then
-              self:write_content(choice.text, buf_id)
+              vim.schedule(function()
+                self:write_content(choice.text, buf_id)
+              end)
             elseif choice.type == 'tool_call' then
               table.insert(pending_tool_calls, choice.tool_call)
-              self:write_content('Calling tool: ' .. choice.tool_call.name .. ' - ' .. vim.json.encode(choice.tool_call) .. '\n', buf_id)
+              vim.schedule(function()
+                self:write_content('Calling tool: ' .. choice.tool_call.name .. ' - ' .. vim.json.encode(choice.tool_call) .. '\n', buf_id)
+              end)
             end
           end
         end,
@@ -183,9 +189,9 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
   end
 
   function handle_conversation()
-    local callback_fn = handle_conversation
+    local callback_fn = vim.schedule_wrap(handle_conversation)
     -- Handle any pending tool calls
-    print('handle_conversation: ' .. vim.inspect(#pending_requests) .. ' pending requests, ' .. vim.inspect(#pending_tool_calls) .. ' pending tool calls')
+    vim.notify('streaming conversation: ' .. vim.inspect(#pending_requests) .. ' pending messages, ' .. vim.inspect(#pending_tool_calls) .. ' pending tool calls', vim.log.levels.DEBUG)
     local tool_call = table.remove(pending_tool_calls, 1)
     if tool_call then
       process_tool_call(tool_call, callback_fn)

@@ -43,8 +43,14 @@ function BaseProvider:make_curl_args(opts)
     end
   end
 
-  vim.list_extend(args, { '-d', vim.json.encode(opts.data), url })
+  vim.list_extend(args, { '--data-binary', '@-', url })
   return args
+end
+
+---@param opts BaseProviderCurlOptions
+---@return string[] | string | nil
+function BaseProvider:make_curl_body(opts)
+  return vim.json.encode(opts.data)
 end
 
 ---@param line string

@@ -441,7 +441,7 @@ end
 function Host:runTool(toolUse, callback)
   local client = self.clientsByTool[toolUse.name]
   if not client then
-    error('Tool not found: ' .. toolUse.name)
+    callback({ isError = true, content = 'Tool not found: ' .. toolUse.name })
     return
   end
 

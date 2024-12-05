@@ -248,9 +248,14 @@ function M.OpenAIPresetBuilder:build(args)
     end
   end
 
-  return vim.tbl_extend('keep', self.headers, {
-    data = vim.tbl_extend('keep', self.params, { messages = messages, tools = tools }),
-  })
+  local data = {
+    messages = messages,
+    model = self.params.model,
+    options = self.params,
+    stream = self.params.stream,
+    tools = tools,
+  }
+  return vim.tbl_extend('keep', self.headers, { data = data })
 end
 
 return M
