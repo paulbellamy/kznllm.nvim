@@ -391,22 +391,27 @@ function Host:init()
 
   local config = readConfigFile('.mcpconfig.json')
   if not config or config == {} then
-    print('No .mcpconfig.json file found')
+    vim.schedule(function()
+      vim.notify('No .mcpconfig.json file found', vim.log.levels.DEBUG)
+    end)
     return
   end
 
   if not config.mcpServers or config.mcpServers == {} then
-    print('No mcpServers found in .mcpconfig.json')
+    vim.schedule(function()
+      vim.notify('No mcpServers found in .mcpconfig.json', vim.log.levels.DEBUG)
+    end)
     return
   end
 
   self.clientsByTool = {}
   for serverName, serverConfig in pairs(config.mcpServers) do
-    print('Initializing MCP Client: ' .. serverName)
+    vim.schedule(function()
+      vim.notify('Initializing MCP Client: ' .. serverName, vim.log.levels.DEBUG)
+    end)
     local client = Client(serverName, Server(serverConfig.command, serverConfig.args, serverConfig.env))
     self.clients[serverName] = client
     client:onInitialized(function()
-      client.tools = {}
       client:listTools({
         callback = function(result)
           for _, tool in ipairs(result.tools) do
@@ -466,7 +471,9 @@ end
 
 function Host:killAllClients()
   for serverName, client in pairs(self.clients) do
-    print('Killing MCP Client: ' .. serverName)
+    vim.schedule(function()
+      vim.notify('Killing MCP Client: ' .. serverName, vim.log.levels.DEBUG)
+    end)
     client:kill()
   end
   self.clients = {}

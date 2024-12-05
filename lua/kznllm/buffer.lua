@@ -123,7 +123,7 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
   local pending_tool_calls = {}
   local job
 
-  function process_tool_call(tool_call)
+  function process_tool_call(tool_call, callback_fn)
     print('Calling tool: ' .. tool_call.name .. ' - ' .. vim.json.encode(tool_call))
     mcp.Host:runTool(tool_call, function(result)
       -- Loop and re-call curl with the result
@@ -131,11 +131,11 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
       print('Tool call result' .. tool_call.name .. ' -> ' .. vim.json.encode(result.content))
       local next_request = provider.handle_tool_result(previous_request, stream, result.content)
       table.insert(pending_requests, next_request)
-      handle_conversation(pending_requests, provider, progress_fn, on_complete_fn, previous_request, pending_tool_calls)
+      callback_fn()
     end)
   end
 
-  function process_request(request)
+  function process_request(request, callback_fn)
     local captured_stdout = ''
     --- NOTE: vim.system can flush multiple consecutive lines into the same stdout buffer
     --- (different from how plenary jobs handles it)
@@ -151,12 +151,10 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
           stream = provider.handle_sse_stream(data)
           for _, choice in ipairs(stream) do
             if choice.type == 'text' then
-              vim.schedule(function()
                 self:write_content(choice.text, buf_id)
               end)
             elseif choice.type == 'tool_call' then
               table.insert(pending_tool_calls, choice.tool_call)
-              vim.schedule(function()
                 self:write_content('Calling tool: ' .. choice.tool_call.name .. ' - ' .. vim.json.encode(choice.tool_call) .. '\n', buf_id)
               end)
             end
@@ -172,7 +170,7 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
           return
         end
         -- More requests to make. Continue the conversation.
-        handle_conversation()
+        callback_fn()
       end
     )
   end
@@ -190,18 +188,19 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
   end
 
   function handle_conversation()
+    local callback_fn = handle_conversation
     -- Handle any pending tool calls
     print('handle_conversation: ' .. vim.inspect(#pending_requests) .. ' pending requests, ' .. vim.inspect(#pending_tool_calls) .. ' pending tool calls')
     local tool_call = table.remove(pending_tool_calls, 1)
     if tool_call then
-      process_tool_call(tool_call)
+      process_tool_call(tool_call, callback_fn)
       return
     end
 
     -- Handle any pending requests
     local request = table.remove(pending_requests, 1)
     if request then
-      process_request(request)
+      process_request(request, callback_fn)
       return
     end
 
@@ -210,7 +209,7 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
   end
 
   -- Start the loop
-  handle_conversation()
+  vim.schedule(handle_conversation)
 
   return {
     is_closing = function()
