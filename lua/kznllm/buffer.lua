@@ -151,12 +151,10 @@ function BufferManager:stream_conversation(initial_request, provider, progress_f
           stream = provider.handle_sse_stream(data)
           for _, choice in ipairs(stream) do
             if choice.type == 'text' then
-                self:write_content(choice.text, buf_id)
-              end)
+              self:write_content(choice.text, buf_id)
             elseif choice.type == 'tool_call' then
               table.insert(pending_tool_calls, choice.tool_call)
-                self:write_content('Calling tool: ' .. choice.tool_call.name .. ' - ' .. vim.json.encode(choice.tool_call) .. '\n', buf_id)
-              end)
+              self:write_content('Calling tool: ' .. choice.tool_call.name .. ' - ' .. vim.json.encode(choice.tool_call) .. '\n', buf_id)
             end
           end
         end,

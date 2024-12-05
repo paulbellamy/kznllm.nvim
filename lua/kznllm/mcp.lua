@@ -117,6 +117,8 @@ function Client(name, server, clientCapabilities)
     server = server,
     isInitialized = false,
     onInitializedCallback = function() end,
+    resources = {},
+    tools = {},
   }
 
   local result = server:request(
