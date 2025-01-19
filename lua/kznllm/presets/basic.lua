@@ -110,9 +110,12 @@ function M.load_selected_preset(preset_list)
   return preset
 end
 
-local anthropic_template_path = utils.join_path({ utils.TEMPLATE_PATH, 'anthropic' })
-local anthropic_system_template = utils.join_path({ anthropic_template_path, 'fill_mode_system_prompt.xml.jinja' })
-local anthropic_user_template = utils.join_path({ anthropic_template_path, 'fill_mode_user_prompt.xml.jinja' })
+function template_path(variant, name)
+  return utils.join_path({ utils.TEMPLATE_PATH, variant, name })
+end
+
+local anthropic_system_template = template_path('anthropic', 'fill_mode_system_prompt.xml.jinja')
+local anthropic_user_template = template_path('anthropic', 'fill_mode_user_prompt.xml.jinja')
 
 local BasicAnthropicPreset = anthropic.AnthropicPresetBuilder
   :new()
@@ -127,9 +130,8 @@ local BasicAnthropicPreset = anthropic.AnthropicPresetBuilder
     { type = 'text', role = 'user', path = anthropic_user_template },
   })
 
-local openai_template_path = utils.join_path({ utils.TEMPLATE_PATH, 'openai' })
-local openai_system_template = utils.join_path({ openai_template_path, 'fill_mode_system_prompt.xml.jinja' })
-local openai_user_template = utils.join_path({ openai_template_path, 'fill_mode_user_prompt.xml.jinja' })
+local openai_system_template = template_path('openai', 'fill_mode_system_prompt.xml.jinja')
+local openai_user_template = template_path('openai', 'fill_mode_user_prompt.xml.jinja')
 
 local BasicOpenAIPreset = openai.OpenAIPresetBuilder
   :new()
@@ -145,6 +147,19 @@ local BasicOpenAIReasoningPreset = openai.OpenAIPresetBuilder:new():add_message_
   { type = 'text', role = 'user', path = openai_system_template },
   { type = 'text', role = 'user', path = openai_user_template },
 })
+
+local qwen_system_template = template_path('qwen', 'fill_mode_system_prompt.xml.jinja')
+local qwen_user_template = template_path('qwen', 'fill_mode_user_prompt.xml.jinja')
+
+local BasicQwenPreset = openai.OpenAIPresetBuilder
+  :new()
+  :add_system_prompts({
+    { type = 'text', path = qwen_system_template },
+  })
+  :add_message_prompts({
+    { type = 'text', role = 'user', path = qwen_user_template },
+  })
+
 
 -- Example task configurations
 M.options = {
@@ -197,7 +212,7 @@ M.options = {
   NewBaseTask({
     id = 'Qwen2.5-Coder-32B-Instruct',
     description = 'Qwen2.5-Coder-32B-Instruct | temp = 0.7',
-    preset_builder = BasicOpenAIPreset:with_opts({
+    preset_builder = BasicQwenPreset:with_opts({
       provider = openai.OpenAIProvider:new({
         api_key_name = 'VLLM_API_KEY',
         base_url = 'http://research.local:8000',
@@ -251,7 +266,7 @@ M.options = {
   NewBaseTask({
     id = 'ollama',
     description = 'ollama | qwen2.5-coder:32b | temp = 0.7',
-    preset_builder = BasicOpenAIPreset:with_opts({
+    preset_builder = BasicQwenPreset:with_opts({
       provider = openai.OpenAIProvider:new({
         base_url = 'http://localhost:11434',
       }),
@@ -259,7 +274,6 @@ M.options = {
         ['model'] = 'qwen2.5-coder:32b',
         ['stream'] = true,
         ['temperature'] = 0.7,
-        ['top_k'] = 20,
         ['top_p'] = 0.8,
         ['repetition_penalty'] = 1.05,
       },
@@ -292,7 +306,6 @@ M.options = {
         ['model'] = 'qwq',
         ['stream'] = true,
         ['temperature'] = 0.7,
-        ['top_k'] = 20,
         ['top_p'] = 0.8,
         ['repetition_penalty'] = 1.05,
       },
@@ -309,7 +322,6 @@ M.options = {
         ['model'] = 'qwq',
         ['stream'] = true,
         ['temperature'] = 0.1,
-        ['top_k'] = 20,
         ['top_p'] = 0.8,
         ['repetition_penalty'] = 1.05,
       },
