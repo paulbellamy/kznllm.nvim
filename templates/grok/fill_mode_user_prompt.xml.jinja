@@ -17,6 +17,8 @@
 
 {% if visual_selection %}
 {% if prefill %}
+Filetype: {{ current_buffer_filetype }}
+
 <|fim_prefix|>{{ visual_selection }}<|fim_suffix|>
 PROVIDE CODE EXACTLY AS IT WOULD APPEAR IN A CODE EDITOR:
 - NO backticks (`)
@@ -26,6 +28,8 @@ PROVIDE CODE EXACTLY AS IT WOULD APPEAR IN A CODE EDITOR:
 - NO explanations
 <|fim_middle|>
 {% else %}
+Filetype: {{ current_buffer_filetype }}
+
 Selected Code:
 {{ visual_selection }}
 
@@ -36,6 +40,10 @@ PROVIDE CODE EXACTLY AS IT WOULD APPEAR IN A CODE EDITOR:
 - NO formatting
 - NO explanations
 {% endif %}
+{% endif %}
+
+{% if rules %}
+Rules: {{ rules.content | trim }}
 {% endif %}
 
 Query: {{ user_query }}
