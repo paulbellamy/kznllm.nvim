@@ -237,14 +237,9 @@ function M.OpenAIPresetBuilder:build(args)
 
   for _, template in ipairs(self.message_templates) do
     if template.type == 'text' then
-      local message_content = {
-        type = template.type,
-        text = utils.make_prompt_from_template({ template_path = template.path, prompt_args = args }),
-      }
-
       table.insert(messages, {
         role = template.role,
-        content = { message_content },
+        content = utils.make_prompt_from_template({ template_path = template.path, prompt_args = args }),
       })
     end
   end

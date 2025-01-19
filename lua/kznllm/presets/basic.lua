@@ -147,6 +147,16 @@ local BasicOpenAIReasoningPreset = openai.OpenAIPresetBuilder:new():add_message_
   { type = 'text', role = 'user', path = openai_user_template },
 })
 
+local BasicOllamaPreset = ollama.OllamaPresetBuilder
+  :new()
+  :add_system_prompts({
+    { type = 'text', path = openai_system_template },
+  })
+  :add_message_prompts({
+    { type = 'text', role = 'user', path = openai_user_template },
+  })
+
+
 local qwen_system_template = template_path('qwen', 'fill_mode_system_prompt.xml.jinja')
 local qwen_user_template = template_path('qwen', 'fill_mode_user_prompt.xml.jinja')
 
@@ -159,6 +169,14 @@ local BasicQwenPreset = openai.OpenAIPresetBuilder
     { type = 'text', role = 'user', path = qwen_user_template },
   })
 
+local OllamaQwenPreset = ollama.OllamaPresetBuilder
+  :new()
+  :add_system_prompts({
+    { type = 'text', path = qwen_system_template },
+  })
+  :add_message_prompts({
+    { type = 'text', role = 'user', path = qwen_user_template },
+  })
 
 -- Example task configurations
 M.options = {
@@ -265,7 +283,7 @@ M.options = {
   NewBaseTask({
     id = 'ollama',
     description = 'ollama | qwen2.5-coder:32b | temp = 0.7',
-    preset_builder = BasicQwenPreset:with_opts({
+    preset_builder = OllamaQwenPreset:with_opts({
       provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'qwen2.5-coder:32b',
@@ -279,7 +297,7 @@ M.options = {
   NewBaseTask({
     id = 'ollama',
     description = 'ollama | mistral-large | temp = 0.7',
-    preset_builder = BasicOpenAIPreset:with_opts({
+    preset_builder = BasicOllamaPreset:with_opts({
       provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'mistral-large',
@@ -293,7 +311,7 @@ M.options = {
   NewBaseTask({
     id = 'ollama',
     description = 'ollama | qwq | temp = 0.7',
-    preset_builder = BasicOpenAIPreset:with_opts({
+    preset_builder = BasicOllamaPreset:with_opts({
       provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'qwq',
@@ -307,7 +325,7 @@ M.options = {
   NewBaseTask({
     id = 'ollama',
     description = 'ollama | qwq | temp = 0.1',
-    preset_builder = BasicOpenAIPreset:with_opts({
+    preset_builder = BasicOllamaPreset:with_opts({
       provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'qwq',
