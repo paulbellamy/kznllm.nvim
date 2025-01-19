@@ -60,18 +60,22 @@ end
 function BaseProvider:make_curl_args(opts)
   local url = self.base_url .. opts.endpoint
 
-  local api_key = os.getenv(self.api_key_name)
-  if not api_key then
-    error(('ERROR: %s is missing from environment variables'):format(self.api_key_name))
-  end
-
   -- stylua: ignore
   local args = {
     '-s', '--fail-with-body', '-N', --silent, with errors, unbuffered output
     '-X', 'POST',
     '-H', 'Content-Type: application/json',
-    '-H', (opts.auth_format and opts.auth_format or 'Authorization: Bearer %s'):format(api_key),
   }
+
+  -- Insert the api key if we have one set
+  if self.api_key_name then
+    local api_key = os.getenv(self.api_key_name)
+    if not api_key then
+      error(('ERROR: %s is missing from environment variables'):format(self.api_key_name))
+    end
+    table.insert(args, '-H')
+    table.insert(args, (opts.auth_format and opts.auth_format or 'Authorization: Bearer %s'):format(api_key))
+  end
 
   if opts.extra_headers ~= nil then
     for _, header in ipairs(opts.extra_headers) do
