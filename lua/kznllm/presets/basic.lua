@@ -4,6 +4,7 @@ local api = vim.api
 
 local anthropic = require('kznllm.specs.anthropic')
 local openai = require('kznllm.specs.openai')
+local ollama = require('kznllm.specs.ollama')
 
 local progress = require('fidget.progress')
 
@@ -267,9 +268,7 @@ M.options = {
     id = 'ollama',
     description = 'ollama | qwen2.5-coder:32b | temp = 0.7',
     preset_builder = BasicQwenPreset:with_opts({
-      provider = openai.OpenAIProvider:new({
-        base_url = 'http://localhost:11434',
-      }),
+      provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'qwen2.5-coder:32b',
         ['stream'] = true,
@@ -283,9 +282,7 @@ M.options = {
     id = 'ollama',
     description = 'ollama | mistral-large | temp = 0.7',
     preset_builder = BasicOpenAIPreset:with_opts({
-      provider = openai.OpenAIProvider:new({
-        base_url = 'http://localhost:11434',
-      }),
+      provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'mistral-large',
         ['stream'] = true,
@@ -299,9 +296,7 @@ M.options = {
     id = 'ollama',
     description = 'ollama | qwq | temp = 0.7',
     preset_builder = BasicOpenAIPreset:with_opts({
-      provider = openai.OpenAIProvider:new({
-        base_url = 'http://localhost:11434',
-      }),
+      provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'qwq',
         ['stream'] = true,
@@ -315,9 +310,7 @@ M.options = {
     id = 'ollama',
     description = 'ollama | qwq | temp = 0.1',
     preset_builder = BasicOpenAIPreset:with_opts({
-      provider = openai.OpenAIProvider:new({
-        base_url = 'http://localhost:11434',
-      }),
+      provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'qwq',
         ['stream'] = true,
