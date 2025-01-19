@@ -14,71 +14,72 @@ local M = {}
 ---@field description string
 ---@field invoke fun(opts: { debug: boolean, progress_fn: fun(state) })
 
----@param config { id: string, description: string, preset_builder: BasePresetBuilder }
+---@param config { id: string, description: string, preset_builder: OpenAIPresetBuilder | AnthropicPresetBuilder }
 local function NewBaseTask(config)
   return {
     id = config.id,
     description = config.description,
     invoke = function(opts)
-      local user_query = utils.get_user_input()
-      if user_query == nil then
-        return
-      end
+      vim.ui.input({ prompt = 'prompt: ' }, function(user_query)
+        if user_query == nil then
+          return
+        end
 
-      local selection, replace = utils.get_visual_selection(opts)
+        local selection, replace = utils.get_visual_selection(opts)
 
-      local current_buf_id = api.nvim_get_current_buf()
-      local current_buffer_context = buffer_manager:get_buffer_context(current_buf_id)
+        local current_buf_id = api.nvim_get_current_buf()
+        local current_buffer_context = buffer_manager:get_buffer_context(current_buf_id)
 
-      local p = progress.handle.create({
-        title = ('[%s]'):format(replace and 'replacing' or 'yapping'),
-        lsp_client = { name = 'kznllm' },
-      })
-
-      local prompt_args = {
-        user_query = user_query,
-        visual_selection = selection,
-        current_buffer_context = current_buffer_context,
-        replace = replace,
-        context_files = utils.get_project_files(),
-        rules = utils.get_rules(),
-      }
-
-      local curl_options = config.preset_builder:build(prompt_args)
-
-      if opts.debug then
-        local scratch_buf_id = buffer_manager:create_scratch_buffer()
-        local debug_data = utils.make_prompt_from_template({
-          template_path = config.preset_builder.debug_template_path,
-          prompt_args = curl_options,
+        local p = progress.handle.create({
+          title = ('[%s]'):format(replace and 'replacing' or 'yapping'),
+          lsp_client = { name = 'kznllm' },
         })
 
-        buffer_manager:write_content(debug_data, scratch_buf_id)
-        vim.cmd('normal! Gzz')
-      end
+        local prompt_args = {
+          user_query = user_query,
+          visual_selection = selection,
+          current_buffer_context = current_buffer_context,
+          replace = replace,
+          context_files = utils.get_project_files(),
+          rules = utils.get_rules(),
+        }
 
-      local provider = config.preset_builder.provider
-      local args = provider:make_curl_args(curl_options)
+        local curl_options = config.preset_builder:build(prompt_args)
 
-      local state = { start = os.time(), last_updated = nil }
-      p:report({ message = ('%s'):format(config.description) })
-      local message_fn = opts.progress_message_fn and opts.progress_message_fn
-        or function(s)
-          return 'yapped'
-        end
-      local message = message_fn(state)
-      local _ = buffer_manager:create_streaming_job(args, provider.handle_sse_stream, function()
-        local progress_message = message_fn(state)
-        if progress_message ~= nil then
-          message = progress_message
+        if opts.debug then
+          local scratch_buf_id = buffer_manager:create_scratch_buffer()
+          local debug_data = utils.make_prompt_from_template({
+            template_path = config.preset_builder.debug_template_path,
+            prompt_args = curl_options,
+          })
+
+          buffer_manager:write_content(debug_data, scratch_buf_id)
+          vim.cmd('normal! Gzz')
         end
 
-        local elapsed = os.time() - state.start
-        if message:format(elapsed) ~= message then
-          p:report({ message = message:format(os.time() - state.start) })
-        end
-      end, function()
-        p:finish()
+        local provider = config.preset_builder.provider
+        local args = provider:make_curl_args(curl_options)
+
+        local state = { start = os.time(), last_updated = nil }
+        p:report({ message = ('%s'):format(config.description) })
+        local message_fn = opts.progress_message_fn and opts.progress_message_fn
+          or function(s)
+            return 'yapped'
+          end
+        local message = message_fn(state)
+        local _ = buffer_manager:create_streaming_job(args, provider.handle_sse_stream, function()
+          local progress_message = message_fn(state)
+          if progress_message ~= nil then
+            message = progress_message
+          end
+
+          local elapsed = os.time() - state.start
+          if message:format(elapsed) ~= message then
+            p:report({ message = message:format(os.time() - state.start) })
+          end
+        end, function()
+          p:finish()
+        end)
       end)
     end,
   }
