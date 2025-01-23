@@ -183,7 +183,9 @@ local deepseek_system_template = template_path('deepseek', 'fill_mode_system_pro
 local deepseek_user_template = template_path('deepseek', 'fill_mode_user_prompt.xml.jinja')
 
 local OllamaDeepseekPreset = ollama.OllamaPresetBuilder
-  :new()
+  :new({
+    debug_template_path = template_path('deepseek', 'debug.xml.jinja'),
+  })
   :add_system_prompts({
     { type = 'text', path = deepseek_system_template },
   })
