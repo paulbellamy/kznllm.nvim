@@ -162,7 +162,9 @@ local qwen_system_template = template_path('qwen', 'fill_mode_system_prompt.xml.
 local qwen_user_template = template_path('qwen', 'fill_mode_user_prompt.xml.jinja')
 
 local BasicQwenPreset = openai.OpenAIPresetBuilder
-  :new()
+  :new({
+    debug_template_path = template_path('qwen', 'debug.xml.jinja'),
+  })
   :add_system_prompts({
     { type = 'text', path = qwen_system_template },
   })
