@@ -45,19 +45,20 @@ local function NewBaseTask(config)
           rules = utils.get_rules(),
         }
 
-        local provider = config.preset_builder.provider
-        local args = provider:make_curl_args(curl_options)
+        local curl_options = config.preset_builder:build(prompt_args)
 
         if opts.debug then
           local scratch_buf_id = buffer_manager:create_scratch_buffer()
           local debug_data = utils.make_prompt_from_template({
             template_path = config.preset_builder.debug_template_path,
-            prompt_args = args,
+            prompt_args = curl_options,
           })
 
           buffer_manager:write_content(debug_data, scratch_buf_id)
           vim.cmd('normal! Gzz')
         end
+
+        local provider = config.preset_builder.provider
 
         local state = { start = os.time(), last_updated = nil }
         p:report({ message = ('%s'):format(config.description) })
@@ -66,7 +67,7 @@ local function NewBaseTask(config)
             return 'yapped'
           end
         local message = message_fn(state)
-        local _ = buffer_manager:create_streaming_job(args, provider.handle_sse_stream, function()
+        local _ = buffer_manager:create_streaming_job(curl_options, provider, function()
           local progress_message = message_fn(state)
           if progress_message ~= nil then
             message = progress_message

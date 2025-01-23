@@ -58,7 +58,8 @@ end
 ---@param opts BaseProviderCurlOptions
 ---@return string[]
 function BaseProvider:make_curl_args(opts)
-  local url = self.base_url .. opts.endpoint
+  local o = opts or {}
+  local url = self.base_url .. o.endpoint
 
   -- stylua: ignore
   local args = {
@@ -74,11 +75,11 @@ function BaseProvider:make_curl_args(opts)
       error(('ERROR: %s is missing from environment variables'):format(self.api_key_name))
     end
     table.insert(args, '-H')
-    table.insert(args, (opts.auth_format and opts.auth_format or 'Authorization: Bearer %s'):format(api_key))
+    table.insert(args, (o.auth_format and o.auth_format or 'Authorization: Bearer %s'):format(api_key))
   end
 
-  if opts.extra_headers ~= nil then
-    for _, header in ipairs(opts.extra_headers) do
+  if o.extra_headers ~= nil then
+    for _, header in ipairs(o.extra_headers) do
       vim.list_extend(args, { '-H', header })
     end
   end
