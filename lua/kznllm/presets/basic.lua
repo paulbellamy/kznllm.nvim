@@ -178,6 +178,19 @@ local OllamaQwenPreset = ollama.OllamaPresetBuilder
     { type = 'text', role = 'user', path = qwen_user_template },
   })
 
+local deepseek_system_template = template_path('deepseek', 'fill_mode_system_prompt.xml.jinja')
+local deepseek_user_template = template_path('deepseek', 'fill_mode_user_prompt.xml.jinja')
+
+local OllamaDeepseekPreset = ollama.OllamaPresetBuilder
+  :new()
+  :add_system_prompts({
+    { type = 'text', path = deepseek_system_template },
+  })
+  :add_message_prompts({
+    { type = 'text', role = 'user', path = deepseek_user_template },
+  })
+
+
 -- Example task configurations
 M.options = {
   NewBaseTask({
@@ -329,6 +342,20 @@ M.options = {
       provider = ollama.OllamaProvider:new(),
       params = {
         ['model'] = 'qwq',
+        ['stream'] = true,
+        ['temperature'] = 0.1,
+        ['top_p'] = 0.8,
+        ['repetition_penalty'] = 1.05,
+      },
+    }),
+  }),
+  NewBaseTask({
+    id = 'ollama',
+    description = 'ollama | deepseek-r1 | temp = 0.1',
+    preset_builder = OllamaDeepseekPreset:with_opts({
+      provider = ollama.OllamaProvider:new(),
+      params = {
+        ['model'] = 'deepseek-r1',
         ['stream'] = true,
         ['temperature'] = 0.1,
         ['top_p'] = 0.8,
