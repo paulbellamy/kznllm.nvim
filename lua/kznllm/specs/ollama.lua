@@ -12,9 +12,89 @@ M.OllamaProvider = {}
 ---@return OllamaProvider
 function M.OllamaProvider:new(opts)
   local o = opts or {}
-  o.base_url = o.base_url or 'http://localhost:11434'
-  return openai.OpenAIProvider:new(o)
+  local instance = BaseProvider:new({
+    base_url = o.base_url or 'http://localhost:11434'
+  })
+
+  -- Set proper metatable for inheritance
+  setmetatable(instance, { __index = self })
+  setmetatable(self, { __index = BaseProvider })
+
+  return instance
 end
+
+function M.OllamaProvider.handle_sse_stream(buf)
+  -- based on sse spec (OpenAI spec uses data-only server-sent events)
+  local content = {}
+
+  for data in buf:gmatch('({.-})\n') do
+    -- if data and data:match '"delta":' then
+    local json = vim.json.decode(data)
+    -- sglang server returns the role as one of the events and it becomes `vim.NIL`, so we have to handle it here
+    if not json.message then
+      vim.print(data)
+      return
+    end
+
+    local message = json.message
+
+    if message.content and message.content ~= '' then
+      table.insert(content, { type = 'text', text = message.content })
+    elseif message.tool_calls then
+      for _, tool_call in ipairs(message.tool_calls) do
+        table.insert(
+          content,
+          {
+            type = 'tool_call',
+            tool_call = {
+              type = 'tool_use',
+              id = tool_call.id,
+              name = tool_call['function'].name,
+              arguments = vim.json.decode(tool_call['function'].arguments),
+            }
+          }
+        )
+      end
+    end
+  end
+
+  return content
+end
+
+function M.OllamaProvider.handle_tool_result(previous_request, response, tool_result, is_error)
+  -- Add the model's response to the conversation history
+  local text = {}
+  local tool_calls = {}
+  for _, choice in ipairs(response) do
+    if choice.type == 'text' then
+      table.insert(text, choice.text)
+    elseif choice.type == 'tool_call' then
+      table.insert(tool_calls, choice.tool_call)
+    end
+  end
+  if #text > 0 or #tool_calls > 0 then
+    table.insert(previous_request.data.messages, {
+      role = 'assistant',
+      content = table.concat(text),
+      tool_calls = tool_calls,
+    })
+  end
+  -- add the tool result to the conversation history
+  if is_error then
+    table.insert(previous_request.data.messages, {
+      role = 'tool',
+      content = 'An error occurred while calling the tool',
+    })
+  end
+  if tool_result then
+    table.insert(previous_request.data.messages, {
+      role = 'tool',
+      content = tool_result,
+    })
+  end
+  return previous_request
+end
+
 
 ---@class OllamaPresetConfig
 ---@field id string
